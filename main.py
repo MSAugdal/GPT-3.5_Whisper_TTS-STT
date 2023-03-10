@@ -5,6 +5,7 @@ from gtts import gTTS
 from time import sleep
 from termcolor import colored
 import sys
+import json
 # pip install SpeechRecognition
 # pip install PyAudio
 # pip install pyobjc
@@ -13,6 +14,8 @@ import sys
 # pip install openai
 # pip install termcolor
 
+storageFile = 'sample.json'
+
 
 class STT_TTS:
     def __init__(self, api_key):
@@ -20,7 +23,17 @@ class STT_TTS:
         self.recognizer.pause_threshold = 2
         openai.api_key = api_key
         self.chosenDevice = None
-        self.messages = [{"role": "system", "content": "you are assistant"}]
+        self.messages = {"data": []}
+        self.getPastChat()
+
+    def getPastChat(self):
+        with open(storageFile, 'r') as openfile:
+            json_object = json.load(openfile)
+            self.messages = json_object
+
+    def loadLastChat(self):
+        with open(storageFile, "w") as outfile:
+            json.dump(self.messages, outfile)
 
     def speechToPrompt(self):
         try:
@@ -36,19 +49,20 @@ class STT_TTS:
                     return dict(text)["text"]
         except:
             print(colored("\nEither microphone doesn't work or you didn't speak", 'red'))
-            print(colored("Please run program again and choose a different device...", 'red'))
+            print(
+                colored("Please run program again and choose a different device...", 'red'))
             sys.exit()
 
     def promptToGPT(self, prompt):
-        self.messages.append({"role": "user", "content": prompt})
+        self.messages["data"].append({"role": "user", "content": prompt})
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo-0301",
             temperature=0.5,
             max_tokens=100,
-            messages=self.messages
+            messages=self.messages["data"]
         )
-        self.messages.append({"role": response["choices"][0]["message"]["role"],
-                              "content": response["choices"][0]["message"]["content"]})
+        self.messages["data"].append({"role": response["choices"][0]["message"]["role"],
+                                      "content": response["choices"][0]["message"]["content"]})
         return response["choices"][0]["message"]["content"]
 
     def gptResponseToTTS(self, GPT_response):
@@ -57,7 +71,8 @@ class STT_TTS:
         playsound("response.mp3")
 
     def showDevices(self):
-        devices = {k: v for k, v in enumerate(sr.Microphone.list_microphone_names())}
+        devices = {k: v for k, v in enumerate(
+            sr.Microphone.list_microphone_names())}
         for k, v in devices.items():
             print(f"{k}: {v}")
         choice = int(input(colored("Enter device index: ", 'yellow')))
@@ -71,11 +86,13 @@ class STT_TTS:
         return
 
     def continuePrompt(self):
-        choice = input(colored("Would you like to continue? (y/n): ", 'yellow'))
+        choice = input(
+            colored("Would you like to continue? (y/n): ", 'yellow'))
         if choice == "y":
             self.getAndShowPrompt()
         elif choice == "n":
             print(colored("Goodbye!", 'yellow'))
+            self.loadLastChat()
             sys.exit()
         else:
             print(colored("Invalid choice", 'red'))
@@ -97,4 +114,10 @@ class STT_TTS:
         self.getAndShowPrompt()
 
 
-STT_TTS("API_KEY").run()
+"""In case the sample file is empty run this first"""
+
+#with open(storageFile, "w") as outfile:
+#json.dump({"data" : [{"role": "system", "content": "you are assistant"}]}, outfile)
+
+"""Else"""
+STT_TTS("API-KEY").run()
