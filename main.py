@@ -19,17 +19,14 @@ class STT_TTS:
         self.recognizer = sr.Recognizer()
         self.recognizer.pause_threshold = 2
         openai.api_key = api_key
+        self.chosenDevice = None
+        self.messages = [{"role": "system", "content": "you are assistant"}]
 
     def speechToPrompt(self):
         try:
-            with sr.Microphone(device_index=self.showDevices()) as source:
+            with sr.Microphone(device_index=self.chosenDevice) as source:
                 print(colored("\nGPT-3 is now listening...", 'yellow'))
-                try:
-                    audio = self.recognizer.listen(source, timeout=6)
-                except:
-                    print(colored("\nNo speech detected", 'red'))
-                    print(colored("If you did speak, please run program again and choose a different device...", 'red'))
-                    sys.exit()
+                audio = self.recognizer.listen(source, timeout=4)
                 print(colored("\nProcessing...", 'yellow'))
                 with open("microphone-results.wav", "wb") as f:
                     f.write(audio.get_wav_data())
@@ -38,20 +35,20 @@ class STT_TTS:
                     text = openai.Audio.transcribe("whisper-1", f)
                     return dict(text)["text"]
         except:
-            print(colored("\nMicrophone not working", 'red'))
+            print(colored("\nEither microphone doesn't work or you didn't speak", 'red'))
             print(colored("Please run program again and choose a different device...", 'red'))
             sys.exit()
 
     def promptToGPT(self, prompt):
+        self.messages.append({"role": "user", "content": prompt})
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo-0301",
             temperature=0.5,
             max_tokens=100,
-            messages=[
-                {"role": "system", "content": "you are chatGPT-3"},
-                {"role": "user", "content": prompt},
-            ],
+            messages=self.messages
         )
+        self.messages.append({"role": response["choices"][0]["message"]["role"],
+                              "content": response["choices"][0]["message"]["content"]})
         return response["choices"][0]["message"]["content"]
 
     def gptResponseToTTS(self, GPT_response):
@@ -65,6 +62,7 @@ class STT_TTS:
             print(f"{k}: {v}")
         choice = int(input(colored("Enter device index: ", 'yellow')))
         if choice in devices:
+            self.chosenDevice = choice
             return choice
         print("Invalid choice")
         sleep(1)
@@ -72,15 +70,31 @@ class STT_TTS:
         self.showDevices()
         return
 
+    def continuePrompt(self):
+        choice = input(colored("Would you like to continue? (y/n): ", 'yellow'))
+        if choice == "y":
+            self.getAndShowPrompt()
+        elif choice == "n":
+            print(colored("Goodbye!", 'yellow'))
+            sys.exit()
+        else:
+            print(colored("Invalid choice", 'red'))
+            sleep(1)
+            self.continuePrompt()
+
+    def getAndShowPrompt(self):
+        prompt = self.speechToPrompt()
+        print(f"\n{colored('Prompt:', 'blue')} {prompt}")
+        response = self.promptToGPT(prompt)
+        print(f"\n{colored('Response:','green')} {response}")
+        self.gptResponseToTTS(response)
+        self.continuePrompt()
+
     def run(self):
         print("\033c")
         print(f"{colored('Welcome to GPT-3!', 'yellow')}\nIt knows many languages, but {colored('it speaks (TTS) english best.', 'yellow')}\n\n{colored('Please choose a device to use as microphone: ','yellow')}")
-        prompt = self.speechToPrompt()
-        if prompt:
-            print(f"\n{colored('Prompt:', 'blue')} {prompt}")
-            response = self.promptToGPT(prompt)
-            print(f"\n{colored('Response:','green')} {response}")
-            self.gptResponseToTTS(response)
+        self.showDevices()
+        self.getAndShowPrompt()
 
 
 STT_TTS("API_KEY").run()
